@@ -15,6 +15,10 @@ const extraF = path.join(dir, 'extra.js');
 if (fs.existsSync(extraF)) { try { require(extraF); } catch (e) { errors.push('extra.js 加载失败: ' + e.message); } }
 const hardF = path.join(dir, 'hard.js');
 if (fs.existsSync(hardF)) { try { require(hardF); } catch (e) { errors.push('hard.js 加载失败: ' + e.message); } }
+const ztF = path.join(dir, 'zhenti.js');
+if (fs.existsSync(ztF)) { try { require(ztF); } catch (e) { errors.push('zhenti.js 加载失败: ' + e.message); } }
+const zt2F = path.join(dir, 'zhenti2.js');
+if (fs.existsSync(zt2F)) { try { require(zt2F); } catch (e) { errors.push('zhenti2.js 加载失败: ' + e.message); } }
 for (let g = 1; g <= 5; g++) {
   const f = path.join(dir, 'gd' + g + '.js');
   if (fs.existsSync(f)) { try { require(f); } catch (e) { errors.push('gd' + g + '.js 加载失败: ' + e.message); } }
@@ -26,7 +30,7 @@ QB.forEach(q => {
   ['id', 'ch', 'type', 'q', 'exp'].forEach(k => { if (q[k] === undefined) errors.push((q.id || '?') + ' 缺少字段 ' + k); });
   if (ids.has(q.id)) errors.push('重复 id: ' + q.id);
   ids.add(q.id);
-  if (!/^(ch\d+|ex|gd\d+|hd\d*)-\d+$/.test(q.id || '')) errors.push('id 格式不对: ' + q.id);
+  if (!/^(ch\d+|ex|gd\d+|hd\d*|zt\d*)-\d+$/.test(q.id || '')) errors.push('id 格式不对: ' + q.id);
   if (!cnt[q.ch]) cnt[q.ch] = {};
   cnt[q.ch][q.type] = (cnt[q.ch][q.type] || 0) + 1;
   if (q.type === 'code') {
