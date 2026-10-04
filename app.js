@@ -435,7 +435,7 @@ function buildSchedule() {
       const tasks = [];
       if (i === 0) tasks.push('🎲 摸底：先做本章“摸底5题”，看看自己现在的水平（不会很正常，别慌）');
       tasks.push('📖 学：看“学习·刷题”里本章讲义 + 教材对应小节，边看边在 VSCode 里敲示例');
-      tasks.push('✏️ 练：本章题目刷 ≥10 道，基础题正确率目标 ≥85%');
+      tasks.push('✏️ 练：本章题目刷 ≥10 道，基础题正确率目标 ≥95%');
       if (i === days - 1) {
         tasks.push('💻 编程：独立写出本章编程题，再对照参考答案复述思路');
         tasks.push('🔁 清零：错题本中本章错题重做到全对');
@@ -959,7 +959,7 @@ function loopCard() {
 function renderStudy() {
   $view.append(h('div', { class: 'card' },
     h('h2', null, '📚 十章讲义 + 题库'),
-    h('p', { class: 'muted' }, '按计划顺序：第1章 → 第10章。每章先看讲义，再点“开始刷题”；正确率 ≥85% 再进下一章。')
+    h('p', { class: 'muted' }, '按计划顺序：第1章 → 第10章。每章先看讲义，再点“开始刷题”；正确率 ≥95% 再进下一章（冲最高分的门槛）。')
   ));
   for (let ch = 1; ch <= 10; ch++) {
     const st = chStat(ch);
@@ -1154,7 +1154,7 @@ function renderMock() {
   MOCK_VIEW = 'home';
   const card = h('div', { class: 'card' });
   card.append(h('h2', null, '🎯 模拟考'));
-  card.append(h('p', { class: 'muted' }, '仿真考卷：单选/判断 20 题 ×2分 ＋ 程序填空 3 题 ×5分 ＋ 读程序写结果 3 题 ×5分 ＋ 编程 2 题 ×15分（自评），限时 120 分钟。请安排整块时间一次做完，中途别翻讲义。'));
+  card.append(h('p', { class: 'muted' }, '仿真考卷（按2027大纲）：单选 20 题 ×2分 ＋ 程序填空 3 题 ×5分 ＋ 看程序写结果 3 题 ×5分 ＋ 编程 2 题 ×15分（自评），限时 120 分钟。组卷含 2 道拉满单选和 1 道压轴难题，比真题略狠——练得狠，考得稳。请安排整块时间一次做完，中途别翻讲义。'));
   card.append(h('div', { class: 'ch-actions' }, h('button', { class: 'btn primary', onclick: startMock }, '🚀 开始一套模拟卷')));
   $view.append(card);
 
@@ -1182,22 +1182,34 @@ function renderMock() {
   }
 }
 function startMock() {
-  const singles = qb().filter(q => q.type === 'single' || q.type === 'judge');
+  // 真题保真组卷（按2027大纲）：单选20（18基础按章轮转+2拉满）＋填空3＋读程序3（2基础+1拉满）＋编程2（1基础+1压轴）
+  const baseS = qb().filter(q => q.type === 'single' && !q.hard);
+  const hardS = qb().filter(q => q.type === 'single' && q.hard);
   const blanks = qb().filter(q => q.type === 'blank');
-  const reads = qb().filter(q => q.type === 'read');
-  const codes = qb().filter(q => q.type === 'code');
+  const baseR = qb().filter(q => q.type === 'read' && !q.hard);
+  const hardR = qb().filter(q => q.type === 'read' && q.hard);
+  const baseC = qb().filter(q => q.type === 'code' && !q.hard);
+  const hardC = qb().filter(q => q.type === 'code' && q.hard);
   const byCh = {};
-  singles.forEach(q => { (byCh[q.ch] = byCh[q.ch] || []).push(q); });
+  baseS.forEach(q => { (byCh[q.ch] = byCh[q.ch] || []).push(q); });
   Object.keys(byCh).forEach(c => { byCh[c] = shuffle(byCh[c]); });
   const chosen = [];
   let more = true;
-  while (more && chosen.length < 20) {
+  while (more && chosen.length < 18) {
     more = false;
     Object.keys(byCh).forEach(function (c) {
-      if (byCh[c].length && chosen.length < 20) { chosen.push(byCh[c].shift()); more = true; }
+      if (byCh[c].length && chosen.length < 18) { chosen.push(byCh[c].shift()); more = true; }
     });
   }
-  const paper = chosen.concat(pickN(blanks, 3), pickN(reads, 3), pickN(codes, 2));
+  const singles = chosen.concat(pickN(hardS, 2));
+  const leftover = shuffle(Object.keys(byCh).reduce(function (a, c) { return a.concat(byCh[c]); }, []));
+  let li = 0;
+  while (singles.length < 20 && li < leftover.length) singles.push(leftover[li++]);
+  const hardRead = pickN(hardR, 1);
+  const reads = hardRead.concat(pickN(baseR, 3 - hardRead.length));
+  const hardCode = pickN(hardC, 1);
+  const codes = hardCode.concat(pickN(baseC, 2 - hardCode.length));
+  const paper = singles.concat(pickN(blanks, 3), reads, codes);
   S.mockCurrent = { started: Date.now(), ids: paper.map(q => q.id), answers: {}, cur: 0 };
   save();
   TAB = 'mock';
@@ -1396,7 +1408,7 @@ function renderStats() {
     h('p', null, '题库共 ', h('b', null, String(all.length)), ' 题（含编程题 ' + all.filter(q => q.type === 'code').length + ' 道）；',
       '客观题已做 ', h('b', null, covered + '/' + obj.length), '；',
       '总正确率 ', r + w ? h('span', { html: rateHtml(r / (r + w)) }) : '—'),
-    h('p', { class: 'muted' }, '目标：12月前客观题正确率 ≥90%、错题本清零。现在离目标还有多远，看下表哪章最弱就先补哪章。')
+    h('p', { class: 'muted' }, '目标：12月前客观题正确率 ≥95%、错题本清零。现在离目标还有多远，看下表哪章最弱就先补哪章。')
   );
   $view.append(head);
   const tb = h('table', { class: 'stats' }, h('tr', null, h('th', null, '章节'), h('th', null, '题量'), h('th', null, '已做'), h('th', null, '正确率'), h('th', null, '待清错题'), h('th', null, '')));
@@ -1498,7 +1510,7 @@ function renderStats() {
 function renderHelp() {
   const steps = h('div', { class: 'card' }, h('h2', null, '🔁 每日学习闭环'));
   [['1', '学', '打开“学习·刷题”，看当天章节的讲义，对照教材和 VSCode 敲示例代码。不求背，求看懂。'],
-   ['2', '练', '点“开始刷题”，鼠标点击选项作答，每题立刻出对错和解析。目标：基础题正确率 ≥85%。'],
+   ['2', '练', '点“开始刷题”，鼠标点击选项作答，每题立刻出对错和解析。目标：基础题正确率 ≥95%。'],
    ['3', '测', '每章最后一天做编程题：先自己写，再对照参考答案自评。写完可以在 VSCode 里跑一遍验证。'],
    ['4', '补', '睡前打开“错题本”，把今天的错题重做到清零。答对自动移出，答错继续留着。'],
    ['5', '报', '回 ZCode 对话发“今日汇报”：正确率、不懂的题号、编程题代码。我负责批改、抽查、讲透你不会的。']
