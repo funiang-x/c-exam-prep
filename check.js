@@ -19,6 +19,8 @@ const ztF = path.join(dir, 'zhenti.js');
 if (fs.existsSync(ztF)) { try { require(ztF); } catch (e) { errors.push('zhenti.js 加载失败: ' + e.message); } }
 const zt2F = path.join(dir, 'zhenti2.js');
 if (fs.existsSync(zt2F)) { try { require(zt2F); } catch (e) { errors.push('zhenti2.js 加载失败: ' + e.message); } }
+const zt3F = path.join(dir, 'zhenti3.js');
+if (fs.existsSync(zt3F)) { try { require(zt3F); } catch (e) { errors.push('zhenti3.js 加载失败: ' + e.message); } }
 for (let g = 1; g <= 5; g++) {
   const f = path.join(dir, 'gd' + g + '.js');
   if (fs.existsSync(f)) { try { require(f); } catch (e) { errors.push('gd' + g + '.js 加载失败: ' + e.message); } }
