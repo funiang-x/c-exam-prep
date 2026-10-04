@@ -221,9 +221,20 @@ function buildReport() {
   const lines = [];
   lines.push('【今日汇报】' + t);
   lines.push('今日刷题：' + lg.n + ' 题，正确率 ' + (lg.n ? Math.round(lg.r * 100 / lg.n) : 0) + '%');
-  lines.push('错题本待清：' + S.wrong.length + ' 题；连续学习 ' + streakCount() + ' 天');
+  let allR = 0, allW = 0, hdR = 0, hdW = 0, ztR = 0, ztW = 0;
+  qb().forEach(function (q) {
+    const st = S.stats[q.id];
+    if (!st) return;
+    allR += st.r; allW += st.w;
+    if (q.hard) { hdR += st.r; hdW += st.w; }
+    else if (q.id.indexOf('zt-') === 0) { ztR += st.r; ztW += st.w; }
+  });
+  const baseR = allR - hdR - ztR, baseW = allW - hdW - ztW;
+  function rl(r, w) { return (r + w) ? Math.round(r * 100 / (r + w)) + '%' : '—'; }
+  lines.push('累计分层正确率：基础 ' + rl(baseR, baseW) + '（' + (baseR + baseW) + ' 次）｜拉满 ' + rl(hdR, hdW) + '（' + (hdR + hdW) + ' 次）｜真题 ' + rl(ztR, ztW) + '（' + (ztR + ztW) + ' 次）');
+  lines.push('题库覆盖：' + Object.keys(S.stats).length + '/' + qb().length + '；SRS到期回炉：' + dueCount() + ' 道；错题本待清：' + S.wrong.length + ' 道；连续学习 ' + streakCount() + ' 天');
   if (S.mockHist.length) lines.push('最近一次模拟：' + S.mockHist[S.mockHist.length - 1].total + ' 分');
-  const wtags = tagStats().filter(m => m.rate != null).slice(0, 3).map(m => m.tag + ' ' + fmtPct(m.rate)).join('、');
+  const wtags = tagStats().slice(0, 3).map(m => m.tag + ' ' + fmtPct(m.rate)).join('、');
   if (wtags) lines.push('薄弱考点：' + wtags);
   lines.push('（请抽查提问，讲解我报不会的题号）');
   return lines.join('\n');
@@ -542,12 +553,14 @@ function render() {
 
 /* ================= 今日任务 ================= */
 /* ================= 工作台 DIY 布局系统 ================= */
-const DEFAULT_LAYOUT = ['countdown', 'tasks', 'smart', 'advice', 'focus', 'notes', 'loop'];
+const DEFAULT_LAYOUT = ['countdown', 'pace', 'profile', 'tasks', 'smart', 'advice', 'focus', 'notes', 'loop'];
 let EDIT_MODE = false;
 let dragId = null;
 
 const WIDGETS = {
   countdown: { name: '📅 考试倒计时', render: renderWCountdown },
+  pace: { name: '⚡ 进度速度表', render: renderWPace },
+  profile: { name: '🎯 水平画像', render: renderWProfile },
   tasks: { name: '📋 今日任务', render: renderWTasks },
   smart: { name: '🧠 智能练习', render: renderWSmart },
   advice: { name: '🧑‍🏫 教练建议', render: renderWAdvice },
@@ -636,6 +649,65 @@ function renderWCountdown(el) {
   el.append(h('div', { class: 'bigcount' }, dl >= 0 ? dl + ' 天' : '考试周'));
   el.append(h('p', { class: 'muted center' }, '2026年12月16日 · 《程序设计基础》 · 闭卷120分钟 · 满分100'));
 }
+function renderWPace(el) {
+  el.append(h('h2', null, '⚡ 进度速度表'));
+  const total = qb().length;
+  const done = Object.keys(S.stats).length;
+  const days = [];
+  for (let i = 6; i >= 0; i--) days.push(addDays(todayStr(), -i));
+  let n7 = 0, r7 = 0;
+  days.forEach(function (d) { const lg = S.log[d]; if (lg) { n7 += lg.n; r7 += lg.r; } });
+  const avg = n7 / 7;
+  const remain = Math.max(total - done, 0);
+  const dLeft = Math.max(daysToExam(), 0);
+  const needPerDay = dLeft ? Math.ceil(remain / dLeft) : remain;
+  el.append(h('div', { class: 'bigcount', style: 'font-size:30px' }, done + ' / ' + total));
+  const fill = h('div');
+  fill.style.width = Math.round(done * 100 / total) + '%';
+  el.append(h('div', { class: 'bar', style: 'margin:6px 0 10px' }, fill));
+  el.append(h('p', { class: 'muted' },
+    '近7天：日均 ' + (Math.round(avg * 10) / 10) + ' 题 · 正确率 ' + (n7 ? Math.round(r7 * 100 / n7) + '%' : '—')));
+  if (avg > 0) {
+    const needDays = Math.ceil(remain / avg);
+    const finish = addDays(todayStr(), needDays);
+    el.append(h('p', { class: 'muted' },
+      '按当前速度：' + needDays + ' 天后（约 ' + finish + '）刷完全库，' +
+      (finish <= '2026-12-16' ? '赶在考试前 ✅' : '⚠️ 会拖过考试日，需要提速')));
+  } else {
+    el.append(h('p', { class: 'muted' }, '按当前速度：还没有刷题记录——今天做 10 道题，这张表就活了。'));
+  }
+  el.append(h('p', { class: 'muted' }, '考前清完全库的底线：每天 ≥ ' + needPerDay + ' 题（剩 ' + remain + ' 题 / ' + dLeft + ' 天）。'));
+}
+function renderWProfile(el) {
+  el.append(h('h2', null, '🎯 水平画像'));
+  let any = false, TR = 0, TW = 0;
+  const rows = h('div');
+  for (let ch = 1; ch <= 10; ch++) {
+    const st = chStat(ch);
+    TR += st.r; TW += st.w;
+    if (!st.touched) continue;
+    any = true;
+    const rate = Math.round(st.rate * 100);
+    const gap = 95 - rate;
+    const head = h('div', { style: 'display:flex;justify-content:space-between;font-size:13px;margin-top:6px' },
+      h('span', null, '第' + ch + '章 ' + chShort(ch)),
+      h('span', { html: rateHtml(st.rate) + (gap > 0 ? ' <span class="muted">差' + gap + 'pt</span>' : ' <span class="muted">达标✓</span>') }));
+    const fill = h('div');
+    fill.style.width = rate + '%';
+    fill.style.background = rate >= 0.95 ? 'var(--ok)' : rate >= 0.85 ? 'var(--warn)' : 'var(--bad)';
+    rows.append(head, h('div', { class: 'bar' }, fill));
+  }
+  if (!any) {
+    el.append(h('p', { class: 'muted center' }, '📊 数据还没开画——去刷第1章，做完20道题这张卡就活了。'));
+    return;
+  }
+  el.append(rows);
+  const rate = (TR + TW) ? TR / (TR + TW) : 0;
+  el.append(h('p', { class: 'muted', style: 'margin-top:8px' },
+    '总体正确率 ' + fmtPct(rate) + ' · 距95%目标还差 ' + Math.max(95 - Math.round(rate * 100), 0) + ' 个百分点'));
+  const weak = tagStats().slice(0, 3);
+  if (weak.length) el.append(h('p', { class: 'muted' }, '薄弱考点：' + weak.map(m => m.tag + ' ' + fmtPct(m.rate)).join('、')));
+}
 function renderWQuote(el) {
   el.append(h('div', { class: 'quote' }, '💬 ' + quoteOfDay()));
 }
@@ -672,6 +744,9 @@ function renderWTasks(el) {
     el.append(row);
   });
   updateBar();
+  const dueN = dueCount();
+  if (dueN) el.append(h('label', { class: 'task' }, h('span', null, '🔁 回炉：智能练习里有 ' + dueN + ' 道 SRS 到期题，记忆曲线点名要复查')));
+  if (S.wrong.length) el.append(h('label', { class: 'task' }, h('span', null, '📒 错题本待清：' + S.wrong.length + ' 道（重做答对才算真会）')));
   el.append(h('div', { class: 'bar', style: 'margin-top:12px' }, barFill), pct);
   const quick = h('div', { class: 'ch-actions' });
   if (day.phase === 1 && day.ch) {
